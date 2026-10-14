@@ -1,0 +1,47 @@
+{
+  "population": {
+    "direction": "treated_to_control"
+  },
+  "variables": {
+    "matching": [
+      "Age"
+    ],
+    "stratification": [
+      "Male"
+    ],
+    "evaluation": [
+      "Diabetes"
+    ]
+  },
+  "constraints": {
+    "calipers": [],
+    "global_caliper": null
+  },
+  "metrics": {
+    "name": "euclidean",
+    "params": {}
+  },
+  "method": {
+    "name": "sorted",
+    "params": {
+      "sort_variable": "Age"
+    }
+  },
+  "validation": {
+    "smd_threshold": 0.1,
+    "balance_metrics": [
+      "smd",
+      "variance_ratio",
+      "ks",
+      "chi_square",
+      "jensen_shannon"
+    ],
+    "plots": true,
+    "max_distribution_plots": 4,
+    "hooks": []
+  },
+  "options": {
+    "drop_rows_with_missing": true,
+    "random_state": 42
+  }
+}

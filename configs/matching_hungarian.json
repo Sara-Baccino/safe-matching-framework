@@ -1,0 +1,53 @@
+{
+  "population": {
+    "direction": "treated_to_control"
+  },
+  "variables": {
+    "matching": [
+      "Age",
+      "BMI",
+      "ALT"
+    ],
+    "stratification": [
+      "Male"
+    ],
+    "evaluation": [
+      "Diabetes"
+    ]
+  },
+  "constraints": {
+    "calipers": [
+      {
+        "variable": "Age",
+        "value": 5,
+        "scale": "absolute"
+      }
+    ],
+    "global_caliper": null
+  },
+  "metrics": {
+    "name": "mahalanobis",
+    "params": {}
+  },
+  "method": {
+    "name": "hungarian",
+    "params": {}
+  },
+  "validation": {
+    "smd_threshold": 0.1,
+    "balance_metrics": [
+      "smd",
+      "variance_ratio",
+      "ks",
+      "chi_square",
+      "jensen_shannon"
+    ],
+    "plots": true,
+    "max_distribution_plots": 4,
+    "hooks": []
+  },
+  "options": {
+    "drop_rows_with_missing": true,
+    "random_state": 42
+  }
+}
