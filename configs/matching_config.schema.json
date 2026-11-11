@@ -1,0 +1,595 @@
+{
+  "$defs": {
+    "AnalysisConfig": {
+      "additionalProperties": false,
+      "description": "Analisi multivariate mostrate nel report (calcolate su matching + stratificazione + evaluation).",
+      "properties": {
+        "pca": {
+          "default": true,
+          "title": "Pca",
+          "type": "boolean"
+        },
+        "pca_variance_target": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Pca Variance Target",
+          "type": "number"
+        },
+        "pca_loadings_components": {
+          "default": 3,
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Pca Loadings Components",
+          "type": "integer"
+        },
+        "distributions": {
+          "default": true,
+          "title": "Distributions",
+          "type": "boolean"
+        },
+        "correlations": {
+          "default": true,
+          "title": "Correlations",
+          "type": "boolean"
+        },
+        "correlation_method": {
+          "default": "pearson",
+          "enum": [
+            "pearson",
+            "spearman"
+          ],
+          "title": "Correlation Method",
+          "type": "string"
+        },
+        "max_correlation_variables": {
+          "default": 25,
+          "maximum": 60,
+          "minimum": 3,
+          "title": "Max Correlation Variables",
+          "type": "integer"
+        },
+        "max_scatter_points": {
+          "default": 3000,
+          "minimum": 200,
+          "title": "Max Scatter Points",
+          "type": "integer"
+        },
+        "ps_support": {
+          "default": true,
+          "title": "Ps Support",
+          "type": "boolean"
+        },
+        "ps_support_bins": {
+          "default": 30,
+          "maximum": 100,
+          "minimum": 10,
+          "title": "Ps Support Bins",
+          "type": "integer"
+        }
+      },
+      "title": "AnalysisConfig",
+      "type": "object"
+    },
+    "BootstrapConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "n_boot": {
+          "default": 200,
+          "maximum": 50000,
+          "minimum": 20,
+          "title": "N Boot",
+          "type": "integer"
+        },
+        "ci_level": {
+          "default": 0.95,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0.5,
+          "title": "Ci Level",
+          "type": "number"
+        },
+        "resample": {
+          "default": "full_pipeline",
+          "enum": [
+            "full_pipeline",
+            "matched_pairs"
+          ],
+          "title": "Resample",
+          "type": "string"
+        },
+        "random_state": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Random State"
+        },
+        "n_jobs": {
+          "default": 1,
+          "minimum": -1,
+          "title": "N Jobs",
+          "type": "integer"
+        }
+      },
+      "title": "BootstrapConfig",
+      "type": "object"
+    },
+    "CaliperWindow": {
+      "additionalProperties": false,
+      "description": "Finestra di tolleranza hard su una variabile: |x_q - x_p| <= value.",
+      "properties": {
+        "variable": {
+          "title": "Variable",
+          "type": "string"
+        },
+        "value": {
+          "exclusiveMinimum": 0,
+          "title": "Value",
+          "type": "number"
+        },
+        "scale": {
+          "default": "absolute",
+          "enum": [
+            "absolute",
+            "standard_deviation"
+          ],
+          "title": "Scale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "value"
+      ],
+      "title": "CaliperWindow",
+      "type": "object"
+    },
+    "ConstraintsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "calipers": {
+          "items": {
+            "$ref": "#/$defs/CaliperWindow"
+          },
+          "title": "Calipers",
+          "type": "array"
+        },
+        "global_caliper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GlobalCaliper"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ConstraintsConfig",
+      "type": "object"
+    },
+    "EstimationConfig": {
+      "additionalProperties": false,
+      "description": "Stima di ATT / ATC / ATE sugli outcome indicati, con errori standard e IC da bootstrap.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "estimands": {
+          "items": {
+            "enum": [
+              "ATT",
+              "ATC",
+              "ATE"
+            ],
+            "type": "string"
+          },
+          "title": "Estimands",
+          "type": "array"
+        },
+        "outcomes": {
+          "items": {
+            "$ref": "#/$defs/OutcomeSpec"
+          },
+          "title": "Outcomes",
+          "type": "array"
+        },
+        "include_naive": {
+          "default": true,
+          "title": "Include Naive",
+          "type": "boolean"
+        },
+        "bootstrap": {
+          "$ref": "#/$defs/BootstrapConfig"
+        }
+      },
+      "title": "EstimationConfig",
+      "type": "object"
+    },
+    "GlobalCaliper": {
+      "additionalProperties": false,
+      "description": "Distanza massima ammessa per una coppia (sulla metrica scelta).",
+      "properties": {
+        "value": {
+          "exclusiveMinimum": 0,
+          "title": "Value",
+          "type": "number"
+        },
+        "scale": {
+          "default": "absolute",
+          "enum": [
+            "absolute",
+            "standard_deviation"
+          ],
+          "title": "Scale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "GlobalCaliper",
+      "type": "object"
+    },
+    "HookSpec": {
+      "additionalProperties": false,
+      "description": "Validazione esterna: callable 'pacchetto.modulo:funzione' (es. un evaluator SAFE).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "callable": {
+          "title": "Callable",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "callable"
+      ],
+      "title": "HookSpec",
+      "type": "object"
+    },
+    "MethodConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MethodConfig",
+      "type": "object"
+    },
+    "MetricConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "euclidean",
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "title": "MetricConfig",
+      "type": "object"
+    },
+    "OptionsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "drop_rows_with_missing": {
+          "default": true,
+          "title": "Drop Rows With Missing",
+          "type": "boolean"
+        },
+        "random_state": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 42,
+          "title": "Random State"
+        }
+      },
+      "title": "OptionsConfig",
+      "type": "object"
+    },
+    "OutcomeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "variable": {
+          "title": "Variable",
+          "type": "string"
+        },
+        "type": {
+          "default": "continuous",
+          "enum": [
+            "continuous",
+            "binary"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "variable"
+      ],
+      "title": "OutcomeSpec",
+      "type": "object"
+    },
+    "PopulationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "default": "treated_to_control",
+          "enum": [
+            "treated_to_control",
+            "control_to_treated"
+          ],
+          "title": "Direction",
+          "type": "string"
+        }
+      },
+      "title": "PopulationConfig",
+      "type": "object"
+    },
+    "SuccessCriteria": {
+      "additionalProperties": false,
+      "description": "Soglie per giudicare riuscito il matching (None = criterio disattivato).",
+      "properties": {
+        "min_match_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.8,
+          "title": "Min Match Rate"
+        },
+        "max_mean_abs_smd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.1,
+          "title": "Max Mean Abs Smd"
+        },
+        "max_abs_smd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.25,
+          "title": "Max Abs Smd"
+        },
+        "min_pct_balanced": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 90.0,
+          "title": "Min Pct Balanced"
+        },
+        "require_improvement": {
+          "default": true,
+          "title": "Require Improvement",
+          "type": "boolean"
+        },
+        "max_pca_smd": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Pca Smd"
+        },
+        "max_corr_diff": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Corr Diff"
+        }
+      },
+      "title": "SuccessCriteria",
+      "type": "object"
+    },
+    "ValidationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis": {
+          "$ref": "#/$defs/AnalysisConfig"
+        },
+        "success_criteria": {
+          "$ref": "#/$defs/SuccessCriteria"
+        },
+        "smd_threshold": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "title": "Smd Threshold",
+          "type": "number"
+        },
+        "balance_metrics": {
+          "items": {
+            "enum": [
+              "smd",
+              "variance_ratio",
+              "ks",
+              "chi_square",
+              "jensen_shannon",
+              "wasserstein"
+            ],
+            "type": "string"
+          },
+          "title": "Balance Metrics",
+          "type": "array"
+        },
+        "plots": {
+          "default": true,
+          "title": "Plots",
+          "type": "boolean"
+        },
+        "max_distribution_plots": {
+          "default": 12,
+          "maximum": 60,
+          "minimum": 0,
+          "title": "Max Distribution Plots",
+          "type": "integer"
+        },
+        "hooks": {
+          "items": {
+            "$ref": "#/$defs/HookSpec"
+          },
+          "title": "Hooks",
+          "type": "array"
+        }
+      },
+      "title": "ValidationConfig",
+      "type": "object"
+    },
+    "VariablesConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "matching": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Matching",
+          "type": "array"
+        },
+        "stratification": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Stratification",
+          "type": "array"
+        },
+        "evaluation": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evaluation",
+          "type": "array"
+        }
+      },
+      "required": [
+        "matching"
+      ],
+      "title": "VariablesConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "population": {
+      "$ref": "#/$defs/PopulationConfig"
+    },
+    "variables": {
+      "$ref": "#/$defs/VariablesConfig"
+    },
+    "constraints": {
+      "$ref": "#/$defs/ConstraintsConfig"
+    },
+    "metrics": {
+      "$ref": "#/$defs/MetricConfig"
+    },
+    "method": {
+      "$ref": "#/$defs/MethodConfig"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationConfig"
+    },
+    "options": {
+      "$ref": "#/$defs/OptionsConfig"
+    },
+    "estimation": {
+      "$ref": "#/$defs/EstimationConfig"
+    }
+  },
+  "required": [
+    "variables",
+    "method"
+  ],
+  "title": "MatchingConfig",
+  "type": "object"
+}

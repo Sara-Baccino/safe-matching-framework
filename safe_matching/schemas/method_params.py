@@ -73,10 +73,20 @@ ALGORITHM_NAMES = ("greedy_nn", "hungarian", "sorted", "partial_ot")
 class PropensityScoreParams(_Params):
     """Stima del propensity score + matching su logit(PS) (o PS)."""
 
-    model: Literal["logistic", "random_forest", "gradient_boosting"] = "logistic"
+    model: Literal["logistic", "random_forest", "xgboost", "gradient_boosting"] = "logistic"
+    model_params: dict[str, Any] = Field(default_factory=dict)
+    """Iperparametri passati al modello (sovrascrivono i default): es. {"n_estimators": 500, "max_depth": 3}
+    per random_forest/xgboost/gradient_boosting; {"penalty": "l2"} per logistic."""
     poly_degree: int = Field(default=1, ge=1, le=4)
+    """Solo logistic: grado dei termini polinomiali."""
     C: float = Field(default=0.5, gt=0)
+    """Solo logistic: inverso della regolarizzazione L2."""
     max_iter: int = Field(default=5000, gt=0)
+    """Solo logistic: iterazioni massime."""
+    cross_fit: bool | None = None
+    """PS fuori-campione (K-fold) per evitare l'overfitting dei modelli flessibili. None = automatico:
+    attivo per random_forest/xgboost/gradient_boosting, spento per logistic."""
+    cross_fit_folds: int = Field(default=5, ge=2, le=20)
     include_stratification: bool = True
     """Include le variabili di stratificazione tra le covariate del modello PS."""
     match_on: Literal["logit", "ps"] = "logit"

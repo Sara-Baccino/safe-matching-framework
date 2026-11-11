@@ -1,110 +1,114 @@
 {
     "ID": {
         "new_name": "ID",
-        "active": true,
-        "id": true,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
-        "missing_data_management": {
-            "strategy": "impute",
-            "imputer": "knn"
-        },
+        "active": false,
         "categorical": false,
         "numerical": false,
-        "mappings": {},
-        "type": "string"
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
+        },
+        "type": "str"
     },
     "Eta": {
         "new_name": "Age",
         "active": true,
-        "id": false,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
-        "missing_data_management": {
-            "strategy": "impute",
-            "imputer": "knn"
-        },
         "categorical": false,
         "numerical": true,
-        "mappings": {},
-        "type": "int"
-    },
-    "Male": {
-        "new_name": "Male",
-        "active": true,
-        "id": false,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
+        "categorical_mappings": {},
         "missing_data_management": {
             "strategy": "impute",
-            "imputer": "knn"
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
         },
+        "type": "int"
+    },
+    "Sesso": {
+        "new_name": "Male",
+        "active": true,
         "categorical": true,
         "numerical": false,
-        "mappings": {
-            "0": 0,
-            "1": 1
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
         },
         "type": "int"
     },
     "BMI": {
         "new_name": "BMI",
         "active": true,
-        "id": false,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
-        "missing_data_management": {
-            "strategy": "impute",
-            "imputer": "knn"
-        },
         "categorical": false,
         "numerical": true,
-        "mappings": {},
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
+        },
         "type": "float"
     },
     "Diabete": {
         "new_name": "Diabetes",
         "active": true,
-        "id": false,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
-        "missing_data_management": {
-            "strategy": "impute",
-            "imputer": "knn"
-        },
         "categorical": true,
         "numerical": false,
-        "mappings": {
-            "0": 0,
-            "1": 1
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
         },
         "type": "int"
     },
     "ALT": {
         "new_name": "ALT",
         "active": true,
-        "id": false,
-        "gene": false,
-        "cytogenetic": false,
-        "clinical": true,
-        "multiplier": 1,
-        "missing_data_management": {
-            "strategy": "impute",
-            "imputer": "knn"
-        },
         "categorical": false,
         "numerical": true,
-        "mappings": {},
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
+        },
         "type": "float"
+    },
+    "Outcome": {
+        "new_name": "Outcome",
+        "active": true,
+        "categorical": false,
+        "numerical": true,
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
+        },
+        "type": "float"
+    },
+    "Evento": {
+        "new_name": "Event",
+        "active": true,
+        "categorical": true,
+        "numerical": false,
+        "categorical_mappings": {},
+        "missing_data_management": {
+            "strategy": "impute",
+            "imputer": "knn",
+            "missing_values": [],
+            "missing_replace_value": null
+        },
+        "type": "int"
     }
 }

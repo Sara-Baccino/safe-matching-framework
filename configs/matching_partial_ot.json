@@ -44,8 +44,20 @@
       "chi_square",
       "jensen_shannon"
     ],
+    "success_criteria": {
+      "min_match_rate": 0.8,
+      "max_mean_abs_smd": 0.1,
+      "max_abs_smd": 0.25,
+      "min_pct_balanced": 90.0
+    },
+    "analysis": {
+      "pca": true,
+      "distributions": true,
+      "correlations": true,
+      "ps_support": true
+    },
+    "max_distribution_plots": 6,
     "plots": true,
-    "max_distribution_plots": 4,
     "hooks": []
   },
   "options": {

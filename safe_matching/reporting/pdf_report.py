@@ -20,8 +20,11 @@ from reportlab.platypus import (
 )
 from xml.sax.saxutils import escape
 
+from safe_matching.estimation import EstimationResult
+from safe_matching.evaluation.analysis import AnalysisResult
 from safe_matching.evaluation.balance import BalanceResult
 from safe_matching.evaluation.hooks import HookResult
+from safe_matching.evaluation.success import SuccessResult
 from safe_matching.exceptions import ReportError
 from safe_matching.matching.engine import MatchingOutcome
 from safe_matching.preprocessing.assembly import PreparedData
@@ -123,10 +126,13 @@ def generate_report(
     balance: BalanceResult,
     cfg: MatchingConfig,
     prepared: PreparedData,
-    figures: list[tuple[str, str, bytes]],
+    success: SuccessResult,
+    analysis: AnalysisResult | None = None,
+    estimation: EstimationResult | None = None,
+    harmonization: Any = None,
+    figures: list[tuple[str, str, bytes]] = (),
     hooks: list[HookResult] | None = None,
     run_info: dict[str, Any] | None = None,
-    data_configs_json: list[dict[str, Any]] | None = None,
     max_table_rows: int = 40,
 ) -> Path:
     """Compila il PDF. ``figures``: lista (chiave, didascalia, png)."""
@@ -151,16 +157,22 @@ def generate_report(
         story.append(Spacer(1, 8))
 
         # ---- verdict ------------------------------------------------------
-        n_unb = int(s.get("n_unbalanced_after", 0)) if s.get("n_variables") else None
-        if n_unb is None:
-            story.append(_banner("<b>No balance diagnostics available.</b>", _WARN, st))
-        elif n_unb == 0:
-            story.append(_banner(f"<b>All {s['n_variables']} evaluated variables are balanced after matching</b> "
-                                 f"(|SMD| &lt; {thr:g}).", _OK, st))
+        if success.n_checks == 0:
+            story.append(_banner("<b>No success criteria could be evaluated.</b>", _WARN, st))
+        elif success.passed:
+            story.append(_banner(f"<b>MATCHING SUCCESSFUL</b> - all {success.n_checks} success criteria are met.", _OK, st))
         else:
-            story.append(_banner(f"<b>{n_unb} of {s['n_variables']} variables remain above the |SMD| threshold of "
-                                 f"{thr:g}</b> after matching (max |SMD| = {_fmt(s.get('max_abs_smd_after'))}).",
-                                 _WARN if n_unb <= max(1, s['n_variables'] // 4) else _BAD, st))
+            story.append(_banner(f"<b>MATCHING NOT FULLY SUCCESSFUL</b> - {success.n_passed} of {success.n_checks} success criteria met.",
+                                 _WARN if success.n_passed >= success.n_checks - 1 else _BAD, st))
+        story.append(Spacer(1, 6))
+        rows_ = [["Criterion", "Observed", "Rule", "Result"]]
+        red_ = {}
+        for i, c_ in enumerate(success.checks, 1):
+            rows_.append([c_["criterion"], _fmt(c_["observed"]), c_["rule"], "PASS" if c_["passed"] else "FAIL"])
+            if not c_["passed"]:
+                red_[i] = _BAD
+        if len(rows_) > 1:
+            story.append(_table(rows_, [7.5 * cm, 3.5 * cm, 3.5 * cm, 3 * cm], st, row_colors=red_))
         story.append(Spacer(1, 8))
 
         # ---- 1. summary ---------------------------------------------------
@@ -181,11 +193,10 @@ def generate_report(
 
         # ---- 2. data ------------------------------------------------------
         story.append(Paragraph("2. Input data", st["h1"]))
-        rows = [["Source", "Role", "Raw rows", "After preprocessing", "Dropped (strategy)", "Imputed values"]]
-        for src in prepared.sources:
-            rows.append([src["name"], src["role"], src["n_rows_raw"], src["n_rows_after_preprocessing"],
-                         src["n_dropped_by_strategy"], src["imputed_values"]])
-        story.append(_table(rows, [4.5 * cm, 2.2 * cm, 2.4 * cm, 3.2 * cm, 2.8 * cm, 2.4 * cm], st))
+        rows = [["Source", "Role", "Raw rows", "Usable rows", "Raw cols", "Active cols"]]
+        for src in prepared.summaries:
+            rows.append([src["name"], src["role"], src["n_rows_raw"], src["n_rows_usable"], src["n_columns_raw"], src["n_columns_active"]])
+        story.append(_table(rows, [5.5 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 2.2 * cm, 2.3 * cm], st))
         story.append(Spacer(1, 4))
         story.append(_kv([
             ("Mode", "single dataset with group column" if prepared.mode == "single" else "two datasets"),
@@ -193,6 +204,64 @@ def generate_report(
             ("Rows excluded (missing in matching variables)", m["n_excluded_missing"]),
             ("Rows trimmed (common support)", m["n_trimmed"]),
         ], st))
+
+        mr = prepared.missing_report
+        if mr.height:
+            story.append(Paragraph("Missing data handling", st["h2"]))
+            pol = cfg.options.missing
+            story.append(Paragraph(
+                f"Variables used in the analysis, before imputation. Policy: continuous = {pol.continuous_imputer} (k={pol.knn_neighbors}), "
+                f"nominal = mode, ordinal = {pol.ordinal_imputer}; tiers: low <= {100 * pol.low_threshold:.0f}%, moderate <= "
+                f"{100 * pol.max_fraction:.0f}%, high above (action: {pol.over_threshold_action}). Outcomes are never imputed. "
+                f"Imputed cells are flagged in the output (columns imputed_NAME) for sensitivity analyses.", st["small"]))
+            story.append(Spacer(1, 3))
+            shown = mr.filter(pl.col("n_missing") > 0)
+            if shown.height == 0:
+                story.append(Paragraph("No missing values in the variables used.", st["body"]))
+            else:
+                rows_m, col_m = [["Source", "Variable", "Role", "Missing", "%", "Tier", "Action", "Method", "Imputed", "Left missing"]], {}
+                for i, r in enumerate(shown.iter_rows(named=True), 1):
+                    rows_m.append([r["source"], r["variable"], r["role"], r["n_missing"], _fmt(r["pct_missing"], 1), r["tier"], r["action"],
+                                   r["method"], r["n_imputed"], r["n_left_missing"]])
+                    if r["tier"] == "high" or r["action"] == "dropped_variable":
+                        col_m[i] = _BAD
+                    elif r["tier"] == "moderate":
+                        col_m[i] = _WARN
+                ws_m = [2.0, 2.3, 2.0, 1.3, 1.0, 1.9, 2.0, 1.8, 1.4, 1.6]
+                story.append(_table(rows_m, [w / sum(ws_m) * _W for w in ws_m], st, row_colors=col_m))
+            story.append(Spacer(1, 4))
+        
+        if harmonization is not None and (harmonization.numeric.height or harmonization.categorical.height or harmonization.actions):
+            h = harmonization
+            story.append(Paragraph("Data harmonization (two datasets)", st["h2"]))
+            story.append(Paragraph(
+                f"A = {escape(h.names[0])}, B = {escape(h.names[1])}. Nominal variables with different codes in the two data configs are "
+                f"recoded on a common mapping (labels stay those of each file); level shares and numeric ranges are compared before matching.", st["small"]))
+            for a_ in h.actions:
+                story.append(Paragraph(f"- {escape(a_)}", st["small"]))
+            if h.numeric.height:
+                story.append(Spacer(1, 3))
+                rows_h, col_h = [["Variable", "Median A", "Median B", "Range A", "Range B", "SMD", "A out of B %", "B out of A %", "Flags"]], {}
+                for i, r in enumerate(h.numeric.iter_rows(named=True), 1):
+                    rows_h.append([r["variable"], _fmt(r["median_a"], 3), _fmt(r["median_b"], 3),
+                                   f"{_fmt(r['min_a'], 2)} - {_fmt(r['max_a'], 2)}", f"{_fmt(r['min_b'], 2)} - {_fmt(r['max_b'], 2)}",
+                                   _fmt(r["smd_raw"], 2), _fmt(r["pct_a_outside_b"], 1), _fmt(r["pct_b_outside_a"], 1), r["flags"] or "-"])
+                    if r["severity"] == "warn":
+                        col_h[i] = _WARN
+                ws_h = [1.9, 1.3, 1.3, 2.0, 2.0, 1.0, 1.3, 1.3, 3.6]
+                story.append(_table(rows_h[:31], [w / sum(ws_h) * _W for w in ws_h], st, row_colors=col_h))
+            if h.categorical.height:
+                diff = h.categorical.filter((pl.col("only_in") != "") | ((pl.col("pct_a") - pl.col("pct_b")).abs() > 10))
+                story.append(Spacer(1, 3))
+                if diff.height:
+                    story.append(Paragraph("Levels present in only one dataset or with share differences above 10 points", st["small"]))
+                    rows_c = [["Variable", "Code", "Label", "n A", "n B", "% A", "% B", "Only in"]] + [
+                        [r["variable"], _fmt(r["code"], 0), r["label"], r["n_a"], r["n_b"], _fmt(r["pct_a"], 1), _fmt(r["pct_b"], 1), r["only_in"] or "-"]
+                        for r in diff.head(30).iter_rows(named=True)]
+                    story.append(_table(rows_c, [w / 12.0 * _W for w in (2.6, 1, 2.6, 1.2, 1.2, 1.2, 1.2, 1.0)], st))
+                else:
+                    story.append(Paragraph("Categorical levels: same levels in both datasets and shares within 10 points.", st["small"]))
+            story.append(Spacer(1, 4))
 
         # ---- 3. configuration --------------------------------------------
         story.append(Paragraph("3. Matching configuration", st["h1"]))
@@ -259,14 +328,118 @@ def generate_report(
             if tbl.height > max_table_rows * 2:
                 story.append(Paragraph(f"(First {max_table_rows * 2} of {tbl.height} rows; full table in balance_table.csv.)", st["small"]))
 
-        for key, caption, png in figures:
-            story.append(Spacer(1, 8))
-            story.append(KeepTogether([_image(png), Paragraph(escape(caption), st["cap"])]))
+        def _figs(prefixes: tuple[str, ...]):
+            for key, caption, png in figures:
+                if key.startswith(prefixes):
+                    story.append(Spacer(1, 8))
+                    story.append(KeepTogether([_image(png), Paragraph(escape(caption), st["cap"])]))
 
-        # ---- 6. external hooks -------------------------------------------
+        an = analysis or AnalysisResult()
+        am = an.metrics
+        if "ps_auc" in am:
+            story.append(Spacer(1, 6))
+            story.append(Paragraph("Propensity score overlap", st["h2"]))
+            story.append(_kv([
+                ("PS discrimination (AUC of the PS vs group)", f"{_fmt(am['ps_auc'])}  (1 = perfect separation, 0.5 = no information)"),
+                ("Common support", f"[{_fmt(am['ps_support_low'], 4)}, {_fmt(am['ps_support_high'], 4)}]"),
+                ("Treated / control outside common support", f"{_fmt(am['ps_pct_treated_outside_support'], 1)}% / {_fmt(am['ps_pct_control_outside_support'], 1)}%"),
+                ("Overlap coefficient (before -> after)", f"{_fmt(am['ps_overlap_coefficient_before'])} -> {_fmt(am['ps_overlap_coefficient_after'])}"),
+            ], st, w1=7.5 * cm))
+            if "ps_overlap_summary" in an.tables:
+                story.append(Spacer(1, 4))
+                ov = an.tables["ps_overlap_summary"]
+                story.append(_table([["Group", "n", "Min", "5%", "Median", "95%", "Max", "% outside"]] +
+                                    [[r["group"], r["n"], _fmt(r["ps_min"], 4), _fmt(r["ps_q05"], 4), _fmt(r["ps_median"], 4),
+                                      _fmt(r["ps_q95"], 4), _fmt(r["ps_max"], 4), _fmt(r["pct_outside_common_support"], 1)]
+                                     for r in ov.iter_rows(named=True)],
+                                    [2.6 * cm, 1.8 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.1 * cm], st))
+        _figs(("ps_",))
+        _figs(("love", "distance", "strata"))
+
+        # ---- 6. PCA ---------------------------------------------------------
+        if "pca_variance" in an.tables:
+            story.append(PageBreak())
+            story.append(Paragraph("6. Multivariate structure (PCA)", st["h1"]))
+            story.append(Paragraph(
+                "PCA is fitted on the standardized analysis variables of the full eligible population (before matching) and "
+                "the matched data is projected on the same components, so the two panels are directly comparable. The |SMD| of "
+                "the component scores summarizes imbalance along the main axes of variation of the data (all variables at once).", st["small"]))
+            story.append(Spacer(1, 4))
+            story.append(_kv([
+                ("Components summarized", f"{am['pca_components_used']} (explaining {_fmt(100 * am['pca_explained_variance_used'], 1)}% of variance)"),
+                ("Euclidean norm of PC |SMD| (before -> after)", f"{_fmt(am['pca_smd_euclid_before'])} -> {_fmt(am['pca_smd_euclid_after'])}"),
+                ("Max PC |SMD| (before -> after)", f"{_fmt(am['pca_max_abs_smd_before'])} -> {_fmt(am['pca_max_abs_smd_after'])}"),
+            ], st, w1=7 * cm))
+            story.append(Spacer(1, 6))
+            pv = an.tables["pca_variance"]
+            red_pc = {i: _BAD for i, r in enumerate(pv.iter_rows(named=True), 1) if abs(r["smd_after"]) >= thr}
+            story.append(_table([["Component", "Explained var.", "Cumulative", "SMD before", "SMD after"]] +
+                                [[r["component"], _fmt(r["explained_variance"]), _fmt(r["cumulative"]), _fmt(r["smd_before"]), _fmt(r["smd_after"])]
+                                 for r in pv.iter_rows(named=True)], [3.5 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm], st, row_colors=red_pc))
+            _figs(("pca_",))
+
+        # ---- 7. distributions -----------------------------------------------
+        if any(k.startswith("dist_grid") for k, _, _ in figures):
+            story.append(PageBreak())
+            story.append(Paragraph("7. Distributions before and after matching", st["h1"]))
+            story.append(Paragraph(
+                f"Variables are ordered by |SMD| before matching (up to {cfg.validation.max_distribution_plots} of the most imbalanced are shown). "
+                "Numeric variables: density histograms; categorical variables: proportions per level. After-matching panels are weighted.", st["small"]))
+            _figs(("dist_grid",))
+
+        # ---- 8. correlations --------------------------------------------------
+        if "correlation_pairs" in an.tables:
+            story.append(PageBreak())
+            story.append(Paragraph("8. Correlations", st["h1"]))
+            story.append(Paragraph(
+                f"{cfg.validation.analysis.correlation_method.title()} correlations are computed separately in treated and control units. "
+                "A good match keeps the joint structure of the variables comparable between groups (difference close to zero) and removes "
+                "the association between each variable and group membership.", st["small"]))
+            story.append(Spacer(1, 4))
+            story.append(_kv([
+                ("Mean |corr(treated) - corr(control)| (before -> after)", f"{_fmt(am['corr_mean_abs_diff_before'])} -> {_fmt(am['corr_mean_abs_diff_after'])}"),
+                ("Max |corr difference| (before -> after)", f"{_fmt(am['corr_max_abs_diff_before'])} -> {_fmt(am['corr_max_abs_diff_after'])}"),
+                ("Variable pairs with |difference| < 0.1 after matching", f"{_fmt(am['corr_pct_pairs_close_after'], 1)}% of {am['corr_n_pairs']}"),
+            ], st, w1=8 * cm))
+            story.append(Spacer(1, 6))
+            story.append(Paragraph("Pairs with the largest correlation difference after matching", st["h2"]))
+            cp = an.tables["correlation_pairs"]
+            story.append(_table([["Variable 1", "Variable 2", "Corr. treated", "Corr. control", "|Diff| before", "|Diff| after"]] +
+                                [[r["variable_1"], r["variable_2"], _fmt(r["corr_treated_after"]), _fmt(r["corr_control_after"]),
+                                  _fmt(r["abs_diff_before"]), _fmt(r["abs_diff_after"])] for r in cp.iter_rows(named=True)],
+                                [3.6 * cm, 3.6 * cm, 2.6 * cm, 2.6 * cm, 2.5 * cm, 2.6 * cm], st))
+            _figs(("corr_",))
+
+        # ---- 9. treatment effects ---------------------------------------------
+        if estimation is not None:
+            ec = cfg.estimation
+            story.append(PageBreak())
+            story.append(Paragraph("9. Treatment effect estimation", st["h1"]))
+            em = estimation.metrics
+            story.append(Paragraph(
+                f"Effects are weighted differences between treated and control outcomes in the matched data (ATT = effect on the treated, "
+                f"ATC = on the controls, ATE = combination weighted by matched query units). Standard errors and "
+                f"{100 * ec.bootstrap.ci_level:.0f}% intervals come from {em['n_boot_ok']} valid bootstrap replicates out of {em['n_boot']} "
+                f"(resampling: {em['resample']}). Outcomes are not used for matching.", st["small"]))
+            story.append(Spacer(1, 4))
+            rows_e = [["Outcome", "Estimand", "Estimator", "Measure", "Estimate", "Boot. SE", "CI (percentile)", "CI (normal)", "p", "Coverage"]]
+            for r in estimation.table.iter_rows(named=True):
+                rows_e.append([r["outcome"], r["estimand"], r["estimator"], r["measure"], _fmt(r["estimate"], 3), _fmt(r["se_boot"], 3),
+                               f"[{_fmt(r['ci_low_pct'], 3)}, {_fmt(r['ci_high_pct'], 3)}]", f"[{_fmt(r['ci_low_norm'], 3)}, {_fmt(r['ci_high_norm'], 3)}]",
+                               _fmt(r["p_value"], 4), "-" if r["coverage"] is None else f"{100 * r['coverage']:.0f}%"])
+            ws_e = [1.8, 1.7, 1.8, 1.8, 1.4, 1.3, 2.4, 2.4, 1.1, 1.7]
+            story.append(_table(rows_e, [w / sum(ws_e) * _W for w in ws_e], st))
+            story.append(Paragraph("Coverage = share of the reference group's units that obtained a match; below 100% the estimate refers "
+                                   "to the matched subset only.", st["small"]))
+            for n_ in estimation.notes:
+                story.append(Spacer(1, 3))
+                story.append(Paragraph(f"- {escape(n_)}", st["small"]))
+            _figs(("eff_",))
+
+        # ---- 10. external hooks -------------------------------------------
         if hooks:
             story.append(PageBreak())
-            story.append(Paragraph("6. External validation", st["h1"]))
+            story.append(Paragraph("10. External validation", st["h1"]))
             for h in hooks:
                 story.append(Paragraph(escape(h.name), st["h2"]))
                 if h.error:
@@ -288,12 +461,6 @@ def generate_report(
             story.append(Paragraph("None.", st["body"]))
         story.append(Paragraph("Appendix B. Matching configuration (JSON)", st["h1"]))
         story.append(Preformatted(json.dumps(cfg.to_dict(), indent=2, ensure_ascii=False), st["code"]))
-        if data_configs_json:
-            for i, dc in enumerate(data_configs_json, 1):
-                active = {k: {"new_name": v["new_name"], "categorical": v["categorical"], "numerical": v["numerical"]}
-                          for k, v in dc["columns"].items() if v["active"]}
-                story.append(Paragraph(f"Appendix C.{i}. Active columns of data config {i}", st["h1"]))
-                story.append(Preformatted(json.dumps(active, indent=1, ensure_ascii=False), st["code"]))
 
         def _footer(canvas, doc):
             canvas.saveState()

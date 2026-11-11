@@ -10,6 +10,7 @@ __all__ = [
     "MatchingError",
     "UnsupportedOptionError",
     "ReportError",
+    "MissingDependencyError",
 ]
 
 
@@ -39,3 +40,7 @@ class UnsupportedOptionError(ConfigError):
 
 class ReportError(SafeMatchingError):
     """Errore nella generazione del report PDF."""
+
+
+class MissingDependencyError(SafeMatchingError):
+    """Una libreria SAFE richiesta (es. safe-data-processing) non e' installata nel venv."""

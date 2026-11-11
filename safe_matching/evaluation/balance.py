@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 from scipy import stats
-from scipy.spatial.distance import jensenshannon
+from scipy.special import rel_entr
 
 from safe_matching.preprocessing.assembly import GROUP_COL
 
@@ -96,7 +96,9 @@ def _categorical_overall(df: pl.DataFrame, var: str, weight_col: str | None) -> 
     if (tab.sum(axis=1) == 0).any():
         return float("nan"), float("nan")
     p, q = tab[0] / tab[0].sum(), tab[1] / tab[1].sum()
-    js = float(jensenshannon(p, q, base=2) ** 2)
+    #js = float(jensenshannon(p, q, base=2) ** 2)
+    mid = (p + q) / 2
+    js = float(max(0.0, 0.5 * (rel_entr(p, mid).sum() + rel_entr(q, mid).sum()) / np.log(2)))   # divergenza JS in [0, 1]
     pval = float("nan")
     if _uniform(w) and tab.shape[1] > 1 and (tab.sum(axis=0) > 0).all():
         try:

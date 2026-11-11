@@ -7,31 +7,48 @@ name = "safe-matching-framework"
 dynamic = ["version"]
 description = "Matching di popolazioni (propensity score, hungarian, sorted, partial optimal transport) con report PDF"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"          # come safe_validation
 license = { text = "Proprietary" }
 dependencies = [
-    "polars>=1.0",
+    # librerie SAFE
+    #"safe-data-processing",          # lettura, mappatura, imputazione, conversione in uscita
+    # versioni allineate a safe_validation, cosi' i due pacchetti convivono nello stesso venv
+    "polars>=1.36.1,<2.0.0",
+    "pydantic>=2.12.5,<3.0.0",
+    "scikit-learn>=1.8.0,<2.0.0",
+    "scipy>=1.16.3,<2.0.0",
+    "fastexcel>=0.18.0,<1.0.0",      # lettura .xlsx (Polars)
+    "pyarrow>=22.0.0,<23.0.0",
+    # matching, grafici, report
     "numpy>=1.26",
-    "scipy>=1.12",
-    "scikit-learn>=1.4",
-    "pydantic>=2.5",
     "pot>=0.9.4",
+    "xgboost>=3.2.0",                # propensity score con XGBoost (stessa versione di safe_validation)
+    "joblib>=1.3",                   # bootstrap in parallelo
     "matplotlib>=3.8",
     "reportlab>=4.0",
+    "xlsxwriter>=3.1",               # scrittura .xlsx dell'output
+    "pytest>=9.1.1",
 ]
 
 [project.optional-dependencies]
-excel = ["fastexcel>=0.10", "openpyxl>=3.1"]
+# Validazione esterna opzionale (hook): installa anche torch, xgboost, lifelines ... (pesante)
+#validation = ["safe_validation"]
 dev = ["pytest>=8"]
 
-[project.scripts]
-safe-matching = "safe_matching.cli:main"
+# uv usa [tool.uv.sources] SOLO del progetto radice: le sorgenti git di safe_validation non vengono ereditate,
+# quindi safe-data-processing va dichiarato anche qui.
+[tool.uv.sources]
+#safe-data-processing = { git = "https://github.com/train-ai/safe-data-processing-framework.git", branch = "dev" }
+#safe_validation = { git = "https://github.com/train-ai/safe-validation-framework.git" }   # aggiungi branch/tag/rev se serve
 
 [tool.hatch.version]
 path = "safe_matching/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["safe_matching"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

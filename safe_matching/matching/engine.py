@@ -80,7 +80,7 @@ class MatchingEngine:
                 raise ConfigError(f"sort_variable '{sort_var}' deve essere tra variables.matching.")
             if len(v.matching) > 1:
                 self._notes.append(
-                    f"'sorted' ordina su '{sort_var}'; le altre variabili di matching sono usate solo per le diagnostiche."
+                    f"'sorted' orders on '{sort_var}'; the other matching variables are used for diagnostics only."
                 )
 
         self._check_columns(df, sort_var)
@@ -93,7 +93,7 @@ class MatchingEngine:
             raise MatchingError(f"{n_missing} righe con mancanti nelle variabili di matching (options.drop_rows_with_missing=false).")
         pop = df.filter(valid)
         if n_missing:
-            self._notes.append(f"{n_missing} righe escluse per valori mancanti nelle variabili di matching/stratificazione/caliper.")
+            self._notes.append(f"{n_missing} rows excluded because of missing values in matching/stratification/caliper variables.")
         if pop.filter(pl.col(GROUP_COL) == 1).height == 0 or pop.filter(pl.col(GROUP_COL) == 0).height == 0:
             raise MatchingError("Dopo l'esclusione dei mancanti un gruppo e' vuoto.")
 
@@ -138,8 +138,8 @@ class MatchingEngine:
             self._warn_multilevel(work, feature_cols)
         if method in ("propensity_score", "sorted") and cfg.metrics.name != "euclidean":
             self._notes.append(
-                f"La metrica '{cfg.metrics.name}' e' ignorata: con '{method}' il matching e' 1-D su "
-                f"{feature_cols[0]} (distanza assoluta)."
+                f"The metric '{cfg.metrics.name}' is ignored: with '{method}' matching is 1-D on "
+                f"{feature_cols[0]} (absolute distance)."
             )
         if algo_name not in ALGORITHMS:
             raise MatchingError(f"Algoritmo '{algo_name}' non registrato.")
@@ -225,7 +225,9 @@ class MatchingEngine:
                             "status": "ok", "note": ""})
 
         if not frames:
-            raise MatchingError("Nessuna coppia/selezione prodotta in alcuno strato (vincoli troppo stretti?).")
+            hint = (" Con propensity_score un PS quasi 0/1 (overfitting di un modello flessibile) lascia i gruppi senza sovrapposizione: "
+                    "usa cross_fit, un modello piu' semplice o aumenta caliper_sd." if method == "propensity_score" else "")
+            raise MatchingError("Nessuna coppia/selezione prodotta in alcuno strato (vincoli troppo stretti?)." + hint)
 
         matched = pl.concat(frames, how="diagonal_relaxed")
         unmatched = pl.concat(unmatched_frames, how="diagonal_relaxed") if unmatched_frames else q_df.head(0)
@@ -276,8 +278,8 @@ class MatchingEngine:
         multi = [c for c in cols if self.kinds.get(c) == "categorical" and df[c].n_unique() > 2]
         if multi:
             self._notes.append(
-                f"Variabili categoriche con >2 livelli trattate come numeri nella metrica '{self.cfg.metrics.name}': {multi}. "
-                "Considera 'hybrid' o la stratificazione."
+                f"Categorical variables with >2 levels are treated as numbers in the '{self.cfg.metrics.name}' metric: {multi}. "
+                "Consider 'hybrid' or stratification."
             )
 
     def _trim(self, work: pl.DataFrame, psp: PropensityScoreParams) -> tuple[pl.DataFrame, int]:
@@ -295,7 +297,7 @@ class MatchingEngine:
         keep = (ps >= lo) & (ps <= hi)
         n = int((~keep).sum())
         if n:
-            self._notes.append(f"Trimming del supporto comune ({psp.trim}): escluse {n} unita' con PS fuori [{lo:.3f}, {hi:.3f}].")
+            self._notes.append(f"Common-support trimming ({psp.trim}): {n} units with PS outside [{lo:.3f}, {hi:.3f}] excluded.")
         out = work.filter(pl.Series(keep))
         if out.filter(pl.col(GROUP_COL) == 1).height == 0 or out.filter(pl.col(GROUP_COL) == 0).height == 0:
             raise MatchingError("Il trimming ha svuotato un gruppo: nessun supporto comune.")
@@ -347,8 +349,8 @@ class MatchingEngine:
         clipped = t > n_p
         if clipped.any():
             self._notes.append(
-                f"partial_ot: target ridotto al pool disponibile in {int(clipped.sum())} strato/i "
-                f"(richiesti {int(t.sum())}, disponibili al massimo {int(np.minimum(t, n_p).sum())})."
+                f"partial_ot: target reduced to the available pool in {int(clipped.sum())} stratum/strata "
+                f"(requested {int(t.sum())}, at most {int(np.minimum(t, n_p).sum())} available)."
             )
         t = np.minimum(t, n_p)
         return dict(zip(keys, t.tolist()))
